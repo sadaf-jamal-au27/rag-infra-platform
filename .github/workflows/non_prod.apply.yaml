@@ -1,0 +1,79 @@
+name: Non-Prod Apply
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'environments/dev/**'
+      - 'environments/qa/**'
+      - 'environments/test/**'
+      - 'infrastructure/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Which non-prod environment to apply'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, qa, test]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ai-rag-agent-project
+
+jobs:
+  # ── dev/ folder ko reference maan ke resource list nikalte hain
+  # (dev/qa/test teeno environments me same resource folders hone chahiye) ──
+  detect-resources:
+    runs-on: ubuntu-latest
+    outputs:
+      resources: ${{ steps.find.outputs.resources }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find resource folders
+        id: find
+        run: |
+          cd environments/dev
+          RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
+          echo "Found resources: $RESOURCES"
+
+  apply:
+    needs: detect-resources
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.environment)) || fromJSON('["dev","qa","test"]') }}
+        resource: ${{ fromJSON(needs.detect-resources.outputs.resources) }}
+      fail-fast: false
+      max-parallel: 1 # sequential — dependency order maintain karne ke liye
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}/${{ matrix.resource }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../${{ matrix.resource }}.hcl
+
+      - name: Terraform Apply
+        run: terraform apply -var-file=../${{ matrix.resource }}.tfvars -auto-approve

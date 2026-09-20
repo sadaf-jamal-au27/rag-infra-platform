@@ -1,0 +1,74 @@
+name: Non-Prod Plan
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'environments/dev/**'
+      - 'environments/qa/**'
+      - 'environments/test/**'
+      - 'infrastructure/**'
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  detect-resources:
+    runs-on: ubuntu-latest
+    outputs:
+      resources: ${{ steps.find.outputs.resources }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find resource folders
+        id: find
+        run: |
+          cd environments/dev
+          RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
+          echo "Found resources: $RESOURCES"
+
+  plan:
+    needs: detect-resources
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev] # qa, test abhi add karo jab unke folders ban jayein
+        resource: ${{ fromJSON(needs.detect-resources.outputs.resources) }}
+      fail-fast: false
+    env:
+      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+    defaults:
+      run:
+        working-directory: environments/${{ matrix.environment }}/${{ matrix.resource }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../${{ matrix.resource }}.hcl
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -var-file=../${{ matrix.resource }}.tfvars -no-color

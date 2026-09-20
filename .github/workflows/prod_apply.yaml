@@ -1,0 +1,66 @@
+name: Prod Apply
+
+on:
+  workflow_dispatch: # Prod sirf MANUALLY trigger hoga, kabhi auto nahi
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ai-rag-agent-project
+
+jobs:
+  # ── Step 1: environments/prod/ ke andar kaunse resource folders hain, dynamically dhundo ──
+  detect-resources:
+    runs-on: ubuntu-latest
+    outputs:
+      resources: ${{ steps.find.outputs.resources }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find resource folders
+        id: find
+        run: |
+          # environments/prod/ ke andar har subfolder jisme main.tf ho, wo ek "resource" hai
+          cd environments/prod
+          RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
+          echo "Found resources: $RESOURCES"
+
+  # ── Step 2: har resource ke liye apply chalao (dynamic matrix) ──
+  apply:
+    needs: detect-resources
+    runs-on: ubuntu-latest
+    environment: production # Settings > Environments > production > Required reviewers set karo
+    strategy:
+      matrix:
+        resource: ${{ fromJSON(needs.detect-resources.outputs.resources) }}
+      fail-fast: false
+      max-parallel: 1 # sequential — dependency order (project_iam pehle, workload_identity baad me)
+    defaults:
+      run:
+        working-directory: environments/prod/${{ matrix.resource }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../${{ matrix.resource }}.hcl
+
+      - name: Terraform Apply
+        run: terraform apply -var-file=../${{ matrix.resource }}.tfvars -auto-approve
