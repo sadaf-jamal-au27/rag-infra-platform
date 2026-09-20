@@ -5,8 +5,6 @@ on:
     branches: [develop]
     paths:
       - 'application/environments/dev/**'
-      - 'application/environments/qa/**'
-      - 'application/environments/test/**'
       - 'application/infrastructure/**'
 
 permissions:
@@ -14,36 +12,15 @@ permissions:
   id-token: write
   pull-requests: write
 
+env:
+  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+
 jobs:
-  detect-resources:
-    runs-on: ubuntu-latest
-    outputs:
-      resources: ${{ steps.find.outputs.resources }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Find resource folders
-        id: find
-        run: |
-          cd application/environments/dev
-          RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
-          echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
-          echo "Found resources: $RESOURCES"
-
   plan:
-    needs: detect-resources
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: [dev] # qa, test abhi add karo jab unke folders ban jayein
-        resource: ${{ fromJSON(needs.detect-resources.outputs.resources) }}
-      fail-fast: false
-    env:
-      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
     defaults:
       run:
-        working-directory: application/environments/${{ matrix.environment }}/${{ matrix.resource }}
+        working-directory: application/infrastructure/cloud_storage
 
     steps:
       - name: Checkout code
@@ -62,7 +39,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -backend-config=../${{ matrix.resource }}.hcl
+        run: terraform init -backend-config=../../environments/dev/cloud_storage.hcl
 
       - name: Terraform Format Check
         run: terraform fmt -check
@@ -71,4 +48,4 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -var-file=../${{ matrix.resource }}.tfvars -no-color
+        run: terraform plan -var-file=../../environments/dev/cloud_storage.tfvars -no-color
