@@ -4,9 +4,9 @@ on:
   pull_request:
     branches: [develop]
     paths:
-      - 'environment/dev/**'
-      - 'environment/qa/**'
-      - 'environment/test/**'
+      - 'environments/dev/**'
+      - 'environments/qa/**'
+      - 'environments/test/**'
       - 'infrastructure/**'
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
       - name: Find resource folders
         id: find
         run: |
-          cd environment/dev
+          cd environments/dev
           RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
           echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
           echo "Found resources: $RESOURCES"
@@ -43,7 +43,7 @@ jobs:
       TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
     defaults:
       run:
-        working-directory: environment/${{ matrix.environment }}/${{ matrix.resource }}
+        working-directory: environments/${{ matrix.environment }}/${{ matrix.resource }}
 
     steps:
       - name: Checkout code
@@ -68,7 +68,7 @@ jobs:
         run: terraform fmt -check
 
       - name: Terraform Validate
-        run: terraform validat
+        run: terraform validate
 
       - name: Terraform Plan
         run: terraform plan -var-file=../${{ matrix.resource }}.tfvars -no-color
