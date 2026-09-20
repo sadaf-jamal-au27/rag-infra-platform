@@ -4,9 +4,9 @@ on:
   pull_request:
     branches: [develop]
     paths:
-      - 'environments/dev/**'
-      - 'environments/qa/**'
-      - 'environments/test/**'
+      - 'environment/dev/**'
+      - 'environment/qa/**'
+      - 'environment/test/**'
       - 'infrastructure/**'
 
 permissions:
@@ -68,7 +68,7 @@ jobs:
         run: terraform fmt -check
 
       - name: Terraform Validate
-        run: terraform validate
+        run: terraform validat
 
       - name: Terraform Plan
         run: terraform plan -var-file=../${{ matrix.resource }}.tfvars -no-color
