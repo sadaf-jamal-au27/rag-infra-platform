@@ -4,10 +4,10 @@ on:
   pull_request:
     branches: [develop]
     paths:
-      - 'environments/dev/**'
-      - 'environments/qa/**'
-      - 'environments/test/**'
-      - 'infrastructure/**'
+      - 'application/environments/dev/**'
+      - 'application/environments/qa/**'
+      - 'application/environments/test/**'
+      - 'application/infrastructure/**'
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
       - name: Find resource folders
         id: find
         run: |
-          cd environments/dev
+          cd application/environments/dev
           RESOURCES=$(find . -maxdepth 1 -type d ! -name "." -exec test -e "{}/main.tf" \; -print | sed 's|^\./||' | jq -R -s -c 'split("\n")[:-1]')
           echo "resources=$RESOURCES" >> "$GITHUB_OUTPUT"
           echo "Found resources: $RESOURCES"
@@ -43,7 +43,7 @@ jobs:
       TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
     defaults:
       run:
-        working-directory: environments/${{ matrix.environment }}/${{ matrix.resource }}
+        working-directory: application/environments/${{ matrix.environment }}/${{ matrix.resource }}
 
     steps:
       - name: Checkout code
