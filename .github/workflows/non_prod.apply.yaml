@@ -1,0 +1,45 @@
+name: Non-Prod Apply
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'application/environments/dev/**'
+      - 'application/infrastructure/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: application/infrastructure/cloud_storage
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Init
+        run: terraform init -backend-config=../../environments/dev/cloud_storage.hcl
+
+      - name: Terraform Apply
+        run: terraform apply -var-file=../../environments/dev/cloud_storage.tfvars -auto-approve

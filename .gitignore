@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────
+# Terraform
+# ─────────────────────────────────────────────
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Terraform lock file — normally commit karte hain reproducibility ke liye,
+# lekin agar version conflicts aa rahe hon, ignore kar sakte ho
+# .terraform.lock.hcl
+
+# ─────────────────────────────────────────────
+# Sensitive / Secrets — KABHI commit nahi honi chahiye
+# ─────────────────────────────────────────────
+*.tfvars.secret
+rag-agent-key.json
+*-key.json
+.env
+.env.local
+
+# ─────────────────────────────────────────────
+# Python (agar app code bhi isi repo me hai)
+# ─────────────────────────────────────────────
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ─────────────────────────────────────────────
+# OS / Editor
+# ─────────────────────────────────────────────
+.DS_Store
+.vscode/
+*.swp
+.idea/
+
+# ─────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────
+*.log
