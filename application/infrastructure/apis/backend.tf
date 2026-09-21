@@ -6,5 +6,5 @@ terraform {
       version = "~> 5.0"
     }
   }
-  backend "gcs" {}   # ← EMPTY, bucket/prefix yahan NAHI
+  backend "gcs" {} # ← EMPTY, bucket/prefix yahan NAHI
 }
