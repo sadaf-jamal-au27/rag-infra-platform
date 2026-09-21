@@ -16,10 +16,6 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  # ─────────────────────────────────────────────
-  # Git diff se pata karo kaunse resource folders change hue
-  # Koi hardcoded filter list nahi — purely dynamic
-  # ─────────────────────────────────────────────
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -39,11 +35,8 @@ jobs:
           echo "Changed files:"
           echo "$changed_files"
 
-          # Do jagah se resource naam nikal sakte hain:
-          # 1. application/infrastructure/<resource>/...
-          # 2. application/environments/dev/<resource>.hcl ya .tfvars
-          resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's|application/infrastructure/||' ; \
-                      echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's|.*/([^./]+)\.(hcl|tfvars)|\1|')
+          resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's#application/infrastructure/##' ; \
+                      echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's#.*/([^./]+)\.(hcl|tfvars)#\1#')
 
           matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
 
