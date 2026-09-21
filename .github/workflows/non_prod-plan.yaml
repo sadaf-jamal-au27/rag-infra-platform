@@ -16,11 +16,48 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  plan:
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # poori git history chahiye diff nikalne ke liye
+
+      - name: Detect changed resource folders
+        id: detect
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          changed_files=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Changed files:"
+          echo "$changed_files"
+
+          resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's#application/infrastructure/##' ; \
+                      echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's#.*/([^./]+)\.(hcl|tfvars)#\1#')
+
+          matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
+
+          if [ "$matrix" = "[]" ] || [ -z "$matrix" ]; then
+            matrix="[]"
+          fi
+
+          echo "Detected resources: $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  plan:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        resource: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
     defaults:
       run:
-        working-directory: application/infrastructure/cloud_storage
+        working-directory: application/infrastructure/${{ matrix.resource }}
 
     steps:
       - name: Checkout code
@@ -39,7 +76,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../environments/dev/cloud_storage.hcl
+        run: terraform init -backend-config=../../environments/dev/${{ matrix.resource }}.hcl
 
       - name: Terraform Format Check
         run: terraform fmt -check
@@ -48,4 +85,4 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -var-file=../../environments/dev/cloud_storage.tfvars -no-color
+        run: terraform plan -var-file=../../environments/dev/${{ matrix.resource }}.tfvars -no-color
