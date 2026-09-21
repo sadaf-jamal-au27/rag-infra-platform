@@ -18,9 +18,13 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        resource: [cloud_storage, apis]
+      fail-fast: false
     defaults:
       run:
-        working-directory: application/infrastructure/cloud_storage
+        working-directory: application/infrastructure/${{ matrix.resource }}
 
     steps:
       - name: Checkout code
@@ -39,7 +43,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../environments/dev/cloud_storage.hcl
+        run: terraform init -backend-config=../../environments/dev/${{ matrix.resource }}.hcl
 
       - name: Terraform Format Check
         run: terraform fmt -check
@@ -48,4 +52,4 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -var-file=../../environments/dev/cloud_storage.tfvars -no-color
+        run: terraform plan -var-file=../../environments/dev/${{ matrix.resource }}.tfvars -no-color
