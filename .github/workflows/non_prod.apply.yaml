@@ -16,11 +16,6 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  # ─────────────────────────────────────────────
-  # push: git diff se changed resources detect karo
-  # workflow_dispatch: application/infrastructure/ ke saare folders (safety)
-  # Dono cases me koi hardcoded resource naam kahin nahi
-  # ─────────────────────────────────────────────
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -34,11 +29,9 @@ jobs:
         id: detect
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger — saare existing resource folders discover karo
             matrix=$(find application/infrastructure -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
                      | jq -R -s -c 'split("\n")[:-1]')
           else
-            # Push trigger — git diff se sirf changed resources
             BASE="${{ github.event.before }}"
             HEAD="${{ github.sha }}"
 
@@ -46,8 +39,8 @@ jobs:
             echo "Changed files:"
             echo "$changed_files"
 
-            resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's|application/infrastructure/||' ; \
-                        echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's|.*/([^./]+)\.(hcl|tfvars)|\1|')
+            resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's#application/infrastructure/##' ; \
+                        echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's#.*/([^./]+)\.(hcl|tfvars)#\1#')
 
             matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
           fi
