@@ -11,4 +11,5 @@ apis_to_enable = [
   "artifactregistry.googleapis.com", # Docker image registry
   "cloudbuild.googleapis.com",       # Container build
   "iamcredentials.googleapis.com",   # Workload Identity Federation
+  "cloudresourcemanager.googleapis.com"  # Cloud Resource Manager
 ]
