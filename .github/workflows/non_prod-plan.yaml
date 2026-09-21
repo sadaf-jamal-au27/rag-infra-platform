@@ -16,11 +16,51 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
+  # ─────────────────────────────────────────────
+  # Git diff se pata karo kaunse resource folders change hue
+  # Koi hardcoded filter list nahi — purely dynamic
+  # ─────────────────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # poori git history chahiye diff nikalne ke liye
+
+      - name: Detect changed resource folders
+        id: detect
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          changed_files=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Changed files:"
+          echo "$changed_files"
+
+          # Do jagah se resource naam nikal sakte hain:
+          # 1. application/infrastructure/<resource>/...
+          # 2. application/environments/dev/<resource>.hcl ya .tfvars
+          resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's|application/infrastructure/||' ; \
+                      echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's|.*/([^./]+)\.(hcl|tfvars)|\1|')
+
+          matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
+
+          if [ "$matrix" = "[]" ] || [ -z "$matrix" ]; then
+            matrix="[]"
+          fi
+
+          echo "Detected resources: $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   plan:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        resource: [cloud_storage, apis]
+        resource: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
       fail-fast: false
     defaults:
       run:

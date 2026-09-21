@@ -16,11 +16,56 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
+  # ─────────────────────────────────────────────
+  # push: git diff se changed resources detect karo
+  # workflow_dispatch: application/infrastructure/ ke saare folders (safety)
+  # Dono cases me koi hardcoded resource naam kahin nahi
+  # ─────────────────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect resources to apply
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger — saare existing resource folders discover karo
+            matrix=$(find application/infrastructure -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+                     | jq -R -s -c 'split("\n")[:-1]')
+          else
+            # Push trigger — git diff se sirf changed resources
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+
+            changed_files=$(git diff --name-only "$BASE" "$HEAD")
+            echo "Changed files:"
+            echo "$changed_files"
+
+            resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's|application/infrastructure/||' ; \
+                        echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's|.*/([^./]+)\.(hcl|tfvars)|\1|')
+
+            matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
+          fi
+
+          if [ -z "$matrix" ]; then
+            matrix="[]"
+          fi
+
+          echo "Detected resources: $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        resource: [cloud_storage, apis]
+        resource: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
       fail-fast: false
     defaults:
       run:
