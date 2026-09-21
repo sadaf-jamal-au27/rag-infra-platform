@@ -16,11 +16,53 @@ env:
   TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  apply:
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect resources to apply
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            matrix=$(find application/infrastructure -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+                     | jq -R -s -c 'split("\n")[:-1]')
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+
+            changed_files=$(git diff --name-only "$BASE" "$HEAD")
+            echo "Changed files:"
+            echo "$changed_files"
+
+            resources=$(echo "$changed_files" | grep -oE 'application/infrastructure/[^/]+' | sed 's#application/infrastructure/##' ; \
+                        echo "$changed_files" | grep -oE 'application/environments/dev/[^./]+\.(hcl|tfvars)' | sed -E 's#.*/([^./]+)\.(hcl|tfvars)#\1#')
+
+            matrix=$(echo "$resources" | sort -u | grep -v '^$' | jq -R -s -c 'split("\n")[:-1]')
+          fi
+
+          if [ -z "$matrix" ]; then
+            matrix="[]"
+          fi
+
+          echo "Detected resources: $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        resource: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+      fail-fast: false
     defaults:
       run:
-        working-directory: application/infrastructure/cloud_storage
+        working-directory: application/infrastructure/${{ matrix.resource }}
 
     steps:
       - name: Checkout code
@@ -39,7 +81,7 @@ jobs:
           terraform_version: "1.7.0"
 
       - name: Terraform Init
-        run: terraform init -backend-config=../../environments/dev/cloud_storage.hcl
+        run: terraform init -backend-config=../../environments/dev/${{ matrix.resource }}.hcl
 
       - name: Terraform Apply
-        run: terraform apply -var-file=../../environments/dev/cloud_storage.tfvars -auto-approve
+        run: terraform apply -var-file=../../environments/dev/${{ matrix.resource }}.tfvars -auto-approve
